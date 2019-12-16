@@ -1,7 +1,13 @@
 #pragma once
 
-namespace Kore {
-	class EventImpl {
-	protected:
-	};
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+typedef struct {
+	int nothing;
+} kinc_event_impl_t;
+
+#ifdef __cplusplus
 }
+#endif

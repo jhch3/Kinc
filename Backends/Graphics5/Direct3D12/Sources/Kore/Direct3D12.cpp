@@ -50,8 +50,12 @@ ID3D12Resource* depthStencilTexture;
 ID3D12CommandQueue* commandQueue;
 IDXGISwapChain* swapChain;
 
-int renderTargetWidth;
-int renderTargetHeight;
+extern "C" {
+	int renderTargetWidth;
+	int renderTargetHeight;
+	int newRenderTargetWidth;
+	int newRenderTargetHeight;
+}
 
 using namespace Kore;
 
@@ -70,7 +74,7 @@ struct RenderEnvironment {
 void createSwapChain(RenderEnvironment* env, const DXGI_SWAP_CHAIN_DESC1* desc);
 #endif
 
-void createSamplers();
+void createSamplersAndHeaps();
 extern bool bilinearFiltering;
 
 namespace {
@@ -221,7 +225,7 @@ namespace {
 		kinc_microsoft_affirm(D3D12SerializeRootSignature(&descRootSignature, D3D_ROOT_SIGNATURE_VERSION_1, &rootBlob, &errorBlob));
 		device->CreateRootSignature(0, rootBlob->GetBufferPointer(), rootBlob->GetBufferSize(), IID_GRAPHICS_PPV_ARGS(&rootSignature));
 
-		createSamplers();
+		createSamplersAndHeaps();
 	}
 
 	void initialize(int width, int height, HWND window) {
@@ -285,14 +289,15 @@ namespace {
 
 void kinc_g5_destroy(int window) {}
 
-void kinc_g5_init(int window, int depthBufferBits, int stencilBufferBits, bool vsync) {
+void kinc_g5_init(int window, int depthBufferBits, int stencilBufferBits, bool verticalSync) {
 #ifdef KORE_WINDOWS
 	HWND hwnd = kinc_windows_window_handle(window);
 #else
 	HWND hwnd = nullptr;
 #endif
-	renderTargetWidth = kinc_width();
-	renderTargetHeight = kinc_height();
+	vsync = verticalSync;
+	newRenderTargetWidth = renderTargetWidth = kinc_width();
+	newRenderTargetHeight = renderTargetHeight = kinc_height();
 	initialize(renderTargetWidth, renderTargetHeight, hwnd);
 }
 
@@ -353,6 +358,16 @@ void kinc_g5_begin(kinc_g5_render_target_t *renderTarget, int window) {
 
 	currentBackBuffer = (currentBackBuffer + 1) % QUEUE_SLOT_COUNT;
 
+	if (newRenderTargetWidth != renderTargetWidth || newRenderTargetHeight != renderTargetHeight) {
+		depthStencilDescriptorHeap->Release();
+		depthStencilTexture->Release();
+		kinc_microsoft_affirm(swapChain->ResizeBuffers(2, newRenderTargetWidth, newRenderTargetHeight, DXGI_FORMAT_R8G8B8A8_UNORM, 0));
+		setupSwapChain();
+		renderTargetWidth = newRenderTargetWidth;
+		renderTargetHeight = newRenderTargetHeight;
+		currentBackBuffer = 0;
+	}
+
 	const UINT64 fenceValue = currentFenceValue;
 	commandQueue->Signal(frameFences[currentBackBuffer], fenceValue);
 	fenceValues[currentBackBuffer] = fenceValue;
@@ -386,15 +401,16 @@ extern "C" bool kinc_window_vsynced(int window) {
 	return true;
 }
 
-extern "C" void kinc_internal_resize(int window, int width, int height) {}
+extern "C" void kinc_internal_resize(int window, int width, int height) {
+	if (width == 0 || height == 0) return;
+	newRenderTargetWidth = width;
+	newRenderTargetHeight = height;
+}
 
 extern "C" void kinc_internal_change_framebuffer(int window, kinc_framebuffer_options_t *frame) {}
 
-void Graphics5::setTextureMagnificationFilter(TextureUnit texunit, TextureFilter filter) {
-	bilinearFiltering = filter != TextureFilter::PointFilter;
-}
 bool kinc_g5_swap_buffers() {
-	kinc_microsoft_affirm(swapChain->Present(1, 0));
+	kinc_microsoft_affirm(swapChain->Present(vsync, 0));
 	return true;
 }
 
@@ -402,9 +418,13 @@ void kinc_g5_flush() {}
 
 void kinc_g5_set_texture_operation(kinc_g5_texture_operation_t operation, kinc_g5_texture_argument_t arg1, kinc_g5_texture_argument_t arg2) {}
 
-void kinc_g5_set_texture_magnification_filter(kinc_g5_texture_unit_t texunit, kinc_g5_texture_filter_t filter) {}
+void kinc_g5_set_texture_magnification_filter(kinc_g5_texture_unit_t texunit, kinc_g5_texture_filter_t filter) {
+	bilinearFiltering = filter != KINC_G5_TEXTURE_FILTER_POINT;
+}
 
-void kinc_g5_set_texture_minification_filter(kinc_g5_texture_unit_t texunit, kinc_g5_texture_filter_t filter) {}
+void kinc_g5_set_texture_minification_filter(kinc_g5_texture_unit_t texunit, kinc_g5_texture_filter_t filter) {
+	bilinearFiltering = filter != KINC_G5_TEXTURE_FILTER_POINT;
+}
 
 void kinc_g5_set_texture_mipmap_filter(kinc_g5_texture_unit_t texunit, kinc_g5_mipmap_filter_t filter) {}
 

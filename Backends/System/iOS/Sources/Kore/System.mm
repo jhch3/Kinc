@@ -9,6 +9,7 @@
 #include <kinc/window.h>
 
 #import <UIKit/UIKit.h>
+#import <AudioToolbox/AudioToolbox.h>
 
 extern "C" {
     bool withAutoreleasepool(bool (*f)()) {
@@ -34,10 +35,6 @@ bool kinc_internal_handle_messages(void) {
 
 void kinc_set_keep_screen_on(bool on) {}
 
-bool kinc_keyboard_available() {
-	return keyboardshown;
-}
-
 void showKeyboard();
 void hideKeyboard();
 
@@ -51,13 +48,20 @@ void kinc_keyboard_hide() {
 	::hideKeyboard();
 }
 
+bool kinc_keyboard_active() {
+	return keyboardshown;
+}
+
 void loadURL(const char* url);
 
 void kinc_load_url(const char* url) {
 	::loadURL(url);
 }
 
-void kinc_vibrate(int ms) {};
+// On iOS you can't set the length of the vibration.
+void kinc_vibrate(int ms) {
+	AudioServicesPlaySystemSound(kSystemSoundID_Vibrate);
+};
 
 static char language[3];
 
@@ -120,9 +124,7 @@ const char* kinc_system_id() {
 }
 
 namespace {
-	const char* savePath = nullptr;
-
-	void getSavePath() {
+	const char* getSavePath() {
 		NSArray* paths = NSSearchPathForDirectoriesInDomains(NSApplicationSupportDirectory, NSUserDomainMask, YES);
 		NSString* resolvedPath = [paths objectAtIndex:0];
 		NSString* appName = [NSString stringWithUTF8String:kinc_application_name()];
@@ -134,13 +136,12 @@ namespace {
 		[fileMgr createDirectoryAtPath:resolvedPath withIntermediateDirectories:YES attributes:nil error:&error];
 
 		resolvedPath = [resolvedPath stringByAppendingString:@"/"];
-		savePath = [resolvedPath cStringUsingEncoding:1];
+		return [resolvedPath cStringUsingEncoding:1];
 	}
 }
 
 const char* kinc_internal_save_path() {
-	if (::savePath == nullptr) getSavePath();
-	return ::savePath;
+	return getSavePath();
 }
 
 namespace {

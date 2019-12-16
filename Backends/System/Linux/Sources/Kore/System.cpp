@@ -70,11 +70,15 @@ namespace {
 	Atom clipboard;
 	Atom utf8;
 	Atom xseldata;
+	Atom targets;
+	Atom multiple;
+	Atom textplain;
 	Window XdndSourceWindow = None;
 	uint32_t penMotionEvent;
 	uint32_t penMaxPressure = 2048;
 	float penPressureLast = 0.0;
 	bool keyPressed[256];
+	char clipboardString[4096];
 
 	void fatalError(const char* message) {
 		printf("main: %s\n", message);
@@ -293,9 +297,10 @@ int createWindow(const char* title, int x, int y, int width, int height, kinc_wi
 	XdndSelection = XInternAtom(Kore::Linux::display, "XdndSelection", 0);
 	clipboard = XInternAtom(Kore::Linux::display, "CLIPBOARD", 0);
 	utf8 = XInternAtom(Kore::Linux::display, "UTF8_STRING", 0);
-	xseldata = XInternAtom(Kore::Linux::display, "XSEL_DATA", False);
-
-	//**XSetSelectionOwner(dpy, clipboard, win, CurrentTime);
+	xseldata = XInternAtom(Kore::Linux::display, "XSEL_DATA", 0);
+	targets = XInternAtom(Kore::Linux::display, "TARGETS", 0);
+	multiple = XInternAtom(Kore::Linux::display, "MULTIPLE", 0);
+	textplain = XInternAtom(Kore::Linux::display, "text/plain;charset=utf-8", 0);
 
 	int count;
 	XDeviceInfoPtr devices = (XDeviceInfoPtr)XListInputDevices(Kore::Linux::display, &count);
@@ -387,20 +392,18 @@ int createWindow(const char* title, int x, int y, int width, int height, kinc_wi
 	xcb_map_window(connection, window);
 	xcb_flush(connection);
 
-	windowimpl::windows[0] = new Kore::Window; //new windowimpl::KoreWindow(win, cx, dstx, dsty, width, height);
-	windowimpl::windows[0]->_data.width = width;
-	windowimpl::windows[0]->_data.height = height;
-	windowimpl::windows[0]->_data.handle = win;
+	kinc_internal_windows[0].width = width;
+    kinc_internal_windows[0].height = height;
+    kinc_internal_windows[0].handle = win;
 
-	if (windowMode == Kore::WindowModeFullscreen || windowMode == Kore::WindowModeExclusiveFullscreen) {
-		windowimpl::windows[0]->_data.mode = windowMode;
+	if (windowMode == KINC_WINDOW_MODE_FULLSCREEN || windowMode == KINC_WINDOW_MODE_EXCLUSIVE_FULLSCREEN) {
+		kinc_internal_windows[0].mode = windowMode;
 	}
 	else {
-		windowimpl::windows[0]->_data.mode = 0;
+		kinc_internal_windows[0].mode = 0;
 	}
 
 	windowimpl::windowCounter = 1;
-
 	return 0;
 #endif
 }
@@ -498,6 +501,13 @@ bool kinc_internal_handle_messages() {
 			}
 			else if (controlDown && (keysym == XK_c || keysym == XK_C)) {
 				XSetSelectionOwner(Kore::Linux::display, clipboard, win, CurrentTime);
+				char *text = kinc_internal_copy_callback();
+				if (text != nullptr) strcpy(clipboardString, text);
+			}
+			else if (controlDown && (keysym == XK_x || keysym == XK_X)) {
+				XSetSelectionOwner(Kore::Linux::display, clipboard, win, CurrentTime);
+				char *text = kinc_internal_cut_callback();
+				if (text != nullptr) strcpy(clipboardString, text);
 			}
 
 			switch (keysym) {
@@ -516,13 +526,58 @@ bool kinc_internal_handle_messages() {
 				KEY(XK_Alt_L, KINC_KEY_ALT)
 				KEY(XK_Alt_R, KINC_KEY_ALT)
 				KEY(XK_Delete, KINC_KEY_DELETE)
+				KEY(XK_comma, KINC_KEY_COMMA)
+				KEY(XK_period, KINC_KEY_PERIOD)
+				KEY(XK_bracketleft, KINC_KEY_OPEN_BRACKET)
+				KEY(XK_bracketright, KINC_KEY_CLOSE_BRACKET)
+				KEY(XK_backslash, KINC_KEY_BACK_SLASH)
+				KEY(XK_apostrophe, KINC_KEY_QUOTE)
+				KEY(XK_semicolon, KINC_KEY_SEMICOLON)
+				KEY(XK_minus, KINC_KEY_HYPHEN_MINUS)
+				KEY(XK_slash, KINC_KEY_SLASH)
+				KEY(XK_less, KINC_KEY_LESS_THAN)
+				KEY(XK_equal, KINC_KEY_EQUALS)
+				KEY(XK_quoteleft, KINC_KEY_BACK_QUOTE)
+				KEY(XK_Pause, KINC_KEY_PAUSE)
+				KEY(XK_Scroll_Lock, KINC_KEY_SCROLL_LOCK)
+				KEY(XK_Home, KINC_KEY_HOME)
+				KEY(XK_Page_Up, KINC_KEY_PAGE_UP)
+				KEY(XK_End, KINC_KEY_END)
+				KEY(XK_Insert, KINC_KEY_INSERT)
+				KEY(XK_KP_Enter, KINC_KEY_RETURN)
+				KEY(XK_KP_Multiply, KINC_KEY_MULTIPLY)
+				KEY(XK_KP_Add, KINC_KEY_ADD)
+				KEY(XK_KP_Subtract, KINC_KEY_SUBTRACT)
+				KEY(XK_KP_Decimal, KINC_KEY_DECIMAL)
+				KEY(XK_KP_Divide, KINC_KEY_DIVIDE)
+				KEY(XK_KP_0, KINC_KEY_0)
+				KEY(XK_KP_1, KINC_KEY_1)
+				KEY(XK_KP_2, KINC_KEY_2)
+				KEY(XK_KP_3, KINC_KEY_3)
+				KEY(XK_KP_4, KINC_KEY_4)
+				KEY(XK_KP_5, KINC_KEY_5)
+				KEY(XK_KP_6, KINC_KEY_6)
+				KEY(XK_KP_7, KINC_KEY_7)
+				KEY(XK_KP_8, KINC_KEY_8)
+				KEY(XK_KP_9, KINC_KEY_9)
+				KEY(XK_KP_Insert, KINC_KEY_INSERT)
+				KEY(XK_KP_Delete, KINC_KEY_DELETE)
+				KEY(XK_KP_End, KINC_KEY_END)
+				KEY(XK_KP_Home, KINC_KEY_HOME)
+				KEY(XK_KP_Left, KINC_KEY_LEFT)
+				KEY(XK_KP_Up, KINC_KEY_UP)
+				KEY(XK_KP_Right, KINC_KEY_RIGHT)
+				KEY(XK_KP_Down, KINC_KEY_DOWN)
+				KEY(XK_KP_Page_Up, KINC_KEY_PAGE_UP)
+				KEY(XK_KP_Page_Down, KINC_KEY_PAGE_DOWN)
+				KEY(XK_Menu, KINC_KEY_CONTEXT_MENU)
 				KEY(XK_a, KINC_KEY_A)
 				KEY(XK_b, KINC_KEY_B)
 				KEY(XK_c, KINC_KEY_C)
 				KEY(XK_d, KINC_KEY_D)
-                KEY(XK_e, KINC_KEY_E)
-                KEY(XK_f, KINC_KEY_F)
-                KEY(XK_g, KINC_KEY_G)
+				KEY(XK_e, KINC_KEY_E)
+				KEY(XK_f, KINC_KEY_F)
+				KEY(XK_g, KINC_KEY_G)
 				KEY(XK_h, KINC_KEY_H)
 				KEY(XK_i, KINC_KEY_I)
 				KEY(XK_j, KINC_KEY_J)
@@ -578,7 +633,7 @@ bool kinc_internal_handle_messages() {
 				KEY(XK_8, KINC_KEY_8)
 				KEY(XK_9, KINC_KEY_9)
 				KEY(XK_0, KINC_KEY_0)
-				KEY(XK_Escape, KINC_KEY_RETURN)
+				KEY(XK_Escape, KINC_KEY_ESCAPE)
 				KEY(XK_F1, KINC_KEY_F1)
 				KEY(XK_F2, KINC_KEY_F2)
 				KEY(XK_F3, KINC_KEY_F3)
@@ -627,6 +682,51 @@ bool kinc_internal_handle_messages() {
 				KEY(XK_Alt_L, KINC_KEY_ALT)
 				KEY(XK_Alt_R, KINC_KEY_ALT)
 				KEY(XK_Delete, KINC_KEY_DELETE)
+				KEY(XK_comma, KINC_KEY_COMMA)
+				KEY(XK_period, KINC_KEY_PERIOD)
+				KEY(XK_bracketleft, KINC_KEY_OPEN_BRACKET)
+				KEY(XK_bracketright, KINC_KEY_CLOSE_BRACKET)
+				KEY(XK_backslash, KINC_KEY_BACK_SLASH)
+				KEY(XK_apostrophe, KINC_KEY_QUOTE)
+				KEY(XK_semicolon, KINC_KEY_SEMICOLON)
+				KEY(XK_minus, KINC_KEY_HYPHEN_MINUS)
+				KEY(XK_slash, KINC_KEY_SLASH)
+				KEY(XK_less, KINC_KEY_LESS_THAN)
+				KEY(XK_equal, KINC_KEY_EQUALS)
+				KEY(XK_quoteleft, KINC_KEY_BACK_QUOTE)
+				KEY(XK_Pause, KINC_KEY_PAUSE)
+				KEY(XK_Scroll_Lock, KINC_KEY_SCROLL_LOCK)
+				KEY(XK_Home, KINC_KEY_HOME)
+				KEY(XK_Page_Up, KINC_KEY_PAGE_UP)
+				KEY(XK_End, KINC_KEY_END)
+				KEY(XK_Insert, KINC_KEY_INSERT)
+				KEY(XK_KP_Enter, KINC_KEY_RETURN)
+				KEY(XK_KP_Multiply, KINC_KEY_MULTIPLY)
+				KEY(XK_KP_Add, KINC_KEY_ADD)
+				KEY(XK_KP_Subtract, KINC_KEY_SUBTRACT)
+				KEY(XK_KP_Decimal, KINC_KEY_DECIMAL)
+				KEY(XK_KP_Divide, KINC_KEY_DIVIDE)
+				KEY(XK_KP_0, KINC_KEY_0)
+				KEY(XK_KP_1, KINC_KEY_1)
+				KEY(XK_KP_2, KINC_KEY_2)
+				KEY(XK_KP_3, KINC_KEY_3)
+				KEY(XK_KP_4, KINC_KEY_4)
+				KEY(XK_KP_5, KINC_KEY_5)
+				KEY(XK_KP_6, KINC_KEY_6)
+				KEY(XK_KP_7, KINC_KEY_7)
+				KEY(XK_KP_8, KINC_KEY_8)
+				KEY(XK_KP_9, KINC_KEY_9)
+				KEY(XK_KP_Insert, KINC_KEY_INSERT)
+				KEY(XK_KP_Delete, KINC_KEY_DELETE)
+				KEY(XK_KP_End, KINC_KEY_END)
+				KEY(XK_KP_Home, KINC_KEY_HOME)
+				KEY(XK_KP_Left, KINC_KEY_LEFT)
+				KEY(XK_KP_Up, KINC_KEY_UP)
+				KEY(XK_KP_Right, KINC_KEY_RIGHT)
+				KEY(XK_KP_Down, KINC_KEY_DOWN)
+				KEY(XK_KP_Page_Up, KINC_KEY_PAGE_UP)
+				KEY(XK_KP_Page_Down, KINC_KEY_PAGE_DOWN)
+				KEY(XK_Menu, KINC_KEY_CONTEXT_MENU)
 				KEY(XK_a, KINC_KEY_A)
 				KEY(XK_b, KINC_KEY_B)
 				KEY(XK_c, KINC_KEY_C)
@@ -643,7 +743,7 @@ bool kinc_internal_handle_messages() {
 				KEY(XK_n, KINC_KEY_N)
 				KEY(XK_o, KINC_KEY_O)
 				KEY(XK_p, KINC_KEY_P)
-				KEY(XK_q, KINC_KEY_O)
+				KEY(XK_q, KINC_KEY_Q)
 				KEY(XK_r, KINC_KEY_R)
 				KEY(XK_s, KINC_KEY_S)
 				KEY(XK_t, KINC_KEY_T)
@@ -786,11 +886,14 @@ bool kinc_internal_handle_messages() {
 			break;
 		}
 		case SelectionNotify: {
-
-			Atom target = event.xselection.target;
 			if (event.xselection.selection == clipboard) {
-				int a = 3;
-				++a;
+				char* result;
+				unsigned long ressize, restail;
+				int resbits;
+				XGetWindowProperty(Kore::Linux::display, win, xseldata, 0, LONG_MAX / 4, False, AnyPropertyType,
+								   &utf8, &resbits, &ressize, &restail, (unsigned char**)&result);
+				kinc_internal_paste_callback(result);
+				XFree(result);
 			}
 			else if (event.xselection.property == XdndSelection) {
 				Atom type;
@@ -806,14 +909,32 @@ bool kinc_internal_handle_messages() {
 				filePath[len] = 0;
                 kinc_internal_drop_files_callback(filePath + 7); // Strip file://
 			}
-			else if (event.xselection.property) {
-				char* result;
-				unsigned long ressize, restail;
-				int resbits;
-				XGetWindowProperty(Kore::Linux::display, win, xseldata, 0, LONG_MAX / 4, False, AnyPropertyType,
-								   &utf8, &resbits, &ressize, &restail, (unsigned char**)&result);
-                kinc_internal_paste_callback(result);
-				XFree(result);
+			break;
+		}
+		case SelectionRequest: {
+			if (event.xselectionrequest.target == targets) {
+				XEvent send;
+				send.xselection.type = SelectionNotify;
+				send.xselection.requestor = event.xselectionrequest.requestor;
+				send.xselection.selection = event.xselectionrequest.selection;
+				send.xselection.target = event.xselectionrequest.target;
+				send.xselection.property = event.xselectionrequest.property;
+				send.xselection.time = event.xselectionrequest.time;
+				Atom available[] = { targets, multiple, textplain, utf8 };
+				XChangeProperty(Kore::Linux::display, send.xselection.requestor, send.xselection.property, XA_ATOM, 32, PropModeReplace, (unsigned char*)&available[0], 4);
+				XSendEvent(Kore::Linux::display, send.xselection.requestor, True, 0, &send);
+			}
+			if (event.xselectionrequest.target == textplain || event.xselectionrequest.target == utf8) {
+				XEvent send;
+				send.xselection.type = SelectionNotify;
+				send.xselection.requestor = event.xselectionrequest.requestor;
+				send.xselection.selection = event.xselectionrequest.selection;
+				send.xselection.target = event.xselectionrequest.target;
+				send.xselection.property = event.xselectionrequest.property;
+				send.xselection.time = event.xselectionrequest.time;
+				XChangeProperty(Kore::Linux::display, send.xselection.requestor, send.xselection.property, send.xselection.target, 8, PropModeReplace,
+					(const unsigned char*)clipboardString, strlen(clipboardString));
+				XSendEvent(Kore::Linux::display, send.xselection.requestor, True, 0, &send);
 			}
 			break;
 		}
@@ -836,16 +957,16 @@ bool kinc_internal_handle_messages() {
 			const xcb_key_press_event_t* key = (const xcb_key_press_event_t*)event;
 			switch (key->detail) {
 			case 111:
-				Kore::Keyboard::the()->_keydown(Kore::KeyUp);
+				kinc_internal_keyboard_trigger_key_down(KINC_KEY_UP);
 				break;
 			case 116:
-				Kore::Keyboard::the()->_keydown(Kore::KeyDown);
+				kinc_internal_keyboard_trigger_key_down(KINC_KEY_DOWN);
 				break;
 			case 113:
-				Kore::Keyboard::the()->_keydown(Kore::KeyLeft);
+				kinc_internal_keyboard_trigger_key_down(KINC_KEY_LEFT);
 				break;
 			case 114:
-				Kore::Keyboard::the()->_keydown(Kore::KeyRight);
+				kinc_internal_keyboard_trigger_key_down(KINC_KEY_RIGHT);
 				break;
 			}
 			break;
@@ -855,16 +976,16 @@ bool kinc_internal_handle_messages() {
 			if (key->detail == 0x9) exit(0);
 			switch (key->detail) {
 			case 111:
-				Kore::Keyboard::the()->_keyup(Kore::KeyUp);
+				kinc_internal_keyboard_trigger_key_up(KINC_KEY_UP);
 				break;
 			case 116:
-				Kore::Keyboard::the()->_keyup(Kore::KeyDown);
+				kinc_internal_keyboard_trigger_key_up(KINC_KEY_DOWN);
 				break;
 			case 113:
-				Kore::Keyboard::the()->_keyup(Kore::KeyLeft);
+				kinc_internal_keyboard_trigger_key_up(KINC_KEY_LEFT);
 				break;
 			case 114:
-				Kore::Keyboard::the()->_keyup(Kore::KeyRight);
+				kinc_internal_keyboard_trigger_key_up(KINC_KEY_RIGHT);
 				break;
 			}
 			break;

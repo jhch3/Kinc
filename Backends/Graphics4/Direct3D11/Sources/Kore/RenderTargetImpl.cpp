@@ -145,7 +145,7 @@ void kinc_g4_render_target_init(kinc_g4_render_target_t *renderTarget, int width
 		}
 		kinc_microsoft_affirm(device->CreateTexture2D(&depthStencilDesc, nullptr, &renderTarget->impl.depthStencil));
 		kinc_microsoft_affirm(device->CreateDepthStencilView(
-		    renderTarget->impl.depthStencil, &CD3D11_DEPTH_STENCIL_VIEW_DESC(D3D11_DSV_DIMENSION_TEXTURE2D, depthViewFormat), &renderTarget->impl.depthStencilView[0]));
+		    renderTarget->impl.depthStencil, &CD3D11_DEPTH_STENCIL_VIEW_DESC(antialiasing ? D3D11_DSV_DIMENSION_TEXTURE2DMS : D3D11_DSV_DIMENSION_TEXTURE2D, depthViewFormat), &renderTarget->impl.depthStencilView[0]));
 	}
 
 	D3D11_SHADER_RESOURCE_VIEW_DESC shaderResourceViewDesc;
@@ -337,6 +337,7 @@ void kinc_g4_render_target_destroy(kinc_g4_render_target_t *renderTarget) {
 	}
 	if (renderTarget->impl.renderTargetSRV != nullptr) renderTarget->impl.renderTargetSRV->Release();
 	if (renderTarget->impl.depthStencilSRV != nullptr) renderTarget->impl.depthStencilSRV->Release();
+	if (renderTarget->impl.depthStencil != nullptr) renderTarget->impl.depthStencil->Release();
 	if (renderTarget->impl.textureRender != nullptr) renderTarget->impl.textureRender->Release();
 	if (renderTarget->impl.textureStaging != nullptr) renderTarget->impl.textureStaging->Release();
 }
